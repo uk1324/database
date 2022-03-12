@@ -1,0 +1,7 @@
+Transactions could be implemented by creating a file before executing an instruction
+which would store the data before the operation and the operation that is going to happen.
+I would need to save the file to disk with every operation in the transation.
+This would be quite slow but it should make it rollbacking state easy.
+
+Another issue with transactions is ensuring that no one can read the data before
+the transaction is finished would require quite a bit of locking.

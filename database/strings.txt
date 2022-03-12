@@ -1,0 +1,9 @@
+If a Windows API function requires a string as an argument 2 versions are provided.
+One for UTF-16 wide strings and another for the ANSI locale(a superset of ASCII I think).
+The ANSI versions are slower because it has to convert the string to UTF-16.
+If I were to use the wide strings for everything I wouldn't be able to use 
+standard functions like fopen(windows provides _wfopen). A custom version of printf
+would be needed for converting "%s" to "%S". It would also require converion
+of data received over sockets or requiring to send the in UTF-16. Porting to other
+OSes would also be difficult. If needed I could store both the UTF-16 and 
+the ASCII version of the string on Windows.

@@ -1,0 +1,36 @@
+I won't bother with checking errors on closing handles. Most of the time there
+shouldn't be any issues when closing a valid handle.
+If a handle is closed it also won't be used after the close.
+Closing multiple handles with error reporting in c is also quite error prone.
+
+Handle h1 = open(), h2 = open(), h3(open);
+
+int r1 = close(h1);
+int r2 = close(h2);
+int r3 = close(h3);
+
+bool error = false;
+if (r1 == ERROR)
+{
+	log_error("h1");
+	error = true;
+}
+
+if (r2 == ERROR)
+{
+	log_error("h2");
+	error = true;
+}
+
+if (r3 == ERROR)
+{
+	log_error("h3");
+	error = true;
+}
+
+if (error == true)
+{
+	return ERROR;
+}
+
+Asserting is simpler.
