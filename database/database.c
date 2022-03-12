@@ -32,21 +32,21 @@ static void calculate_columns_offset_in_entry_and_entry_size(Table* table)
 
 static Result create_read_write_file_map(
 	HANDLE file,
-	HANDLE* file_mapping_object,
+	HANDLE* data_file_mapping_object,
 	void** file_map, 
 	size_t size)
 {
-	*file_mapping_object = CreateFileMappingW(
+	*data_file_mapping_object = CreateFileMappingW(
 		file, /* if a initial size is bigger than 2^16 it has to be split in half */
 		NULL, PAGE_READWRITE, 0, (DWORD)size, NULL);
-	if (*file_mapping_object == NULL)
+	if (*data_file_mapping_object == NULL)
 	{
 		log_error("failed to create file mapping object ec: %d", GetLastError());
 		return RESULT_ERROR;
 	}
 
 	*file_map = MapViewOfFile(
-		*file_mapping_object,
+		*data_file_mapping_object,
 		FILE_MAP_ALL_ACCESS, 0, 0, size);
 	if (*file_map == NULL)
 	{
@@ -54,6 +54,85 @@ static Result create_read_write_file_map(
 		return RESULT_ERROR;
 	}
 
+	return RESULT_OK;
+}
+
+static Result create_read_write_file(HANDLE* file, const char* filename)
+{
+	*file = CreateFileA(
+		filename,
+		GENERIC_READ | GENERIC_WRITE,
+		0,
+		NULL,
+		CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
+
+	if (*file == INVALID_HANDLE_VALUE)
+	{
+		log_error("failed to create file '%s' ec: %d", filename, GetLastError());
+		return RESULT_ERROR;
+	}
+	return RESULT_OK;
+}
+
+static Result open_read_write_file(HANDLE* file, const char* filename)
+{
+	*file = CreateFileA(
+		filename,
+		GENERIC_READ | GENERIC_WRITE,
+		0,
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
+
+	if (*file == INVALID_HANDLE_VALUE)
+	{
+		log_error("failed to open file '%s' ec: %d", filename, GetLastError());
+		return RESULT_ERROR;
+	}
+	return RESULT_OK;
+}
+
+// Making a separate function just to do 2 things and check errors probably isn't the best thing to do.
+// Could also just use an if statement with an '&&' than close the file handles even if they are invalid.
+// Or have a function that checks and closes a handle. This is shorter.
+static Result create_read_write_file_and_create_file_map(
+	HANDLE* file,
+	HANDLE* data_file_mapping_object,
+	void** file_map,
+	char* filename,
+	size_t size)
+{
+	if (create_read_write_file(file, filename) == RESULT_ERROR)
+	{
+		return RESULT_ERROR;
+	}
+	if (create_read_write_file_map(*file, data_file_mapping_object, file_map, size) == RESULT_ERROR)
+	{
+		ASSERT(CloseHandle(*file));
+		return RESULT_ERROR;
+	}
+	return RESULT_OK;
+}
+
+static Result open_read_write_file_and_create_file_map(
+	HANDLE* file,
+	HANDLE* data_file_mapping_object,
+	void** file_map,
+	char* filename,
+	size_t size)
+{
+	if (open_read_write_file(file, filename) == RESULT_ERROR)
+	{
+		return RESULT_ERROR;
+	}
+	if (create_read_write_file_map(*file, data_file_mapping_object, file_map, size) == RESULT_ERROR)
+	{
+		ASSERT(CloseHandle(*file));
+		return RESULT_ERROR;
+	}
 	return RESULT_OK;
 }
 
@@ -111,42 +190,38 @@ Result table_create(Table* table, String string)
 	}
 
 #undef WRITE_TO_INFO_FILE
+#undef WRITE_TO_INFO_FILE_BYTES
 	ASSERT(fclose(info_file) != EOF);
 
-	String filename = string_concat(
-		string_view_from_string(&table->name),
-		string_view_from_cstring("_data"));
-
-	table->data_file = CreateFileA(
-		filename.data,
-		GENERIC_READ | GENERIC_WRITE,
-		0,
-		NULL,
-		CREATE_ALWAYS,
-		FILE_ATTRIBUTE_NORMAL,
-		NULL);
-
-	string_free(&filename);
-	if (table->data_file == INVALID_HANDLE_VALUE)
+	if (open_read_write_file_and_create_file_map(
+		&table->entry_auto_increment_file,
+		&table->entry_auto_increment_mapping_object,
+		&table->entry_auto_increment,
+		table->name.data,
+		sizeof(u64)) == RESULT_ERROR)
 	{
 		string_free(&table->name);
 		free_table_columns(table);
-
-		log_error("failed to create data file ec: %d", GetLastError());
 		return RESULT_ERROR;
 	}
 
-	// Could use GetSystemInfo to get page size
-	size_t initial_size = PAGE_SIZE;
-
-	if (create_read_write_file_map(
-		table->data_file,
-		&table->file_mapping_object,
-		&table->data_file, initial_size) == RESULT_ERROR)
+	String data_file_name = string_concat(
+		string_view_from_string(&table->name), string_view_from_cstring("_data"));
+	size_t initial_size = PAGE_SIZE; // Could use GetSystemInfo to get page size
+	Result result = create_read_write_file_and_create_file_map(
+		&table->data_file,
+		&table->data_file_mapping_object,
+		&table->data_file_map,
+		data_file_name.data,
+		initial_size);
+	string_free(&data_file_name);
+	if (result == RESULT_ERROR)
 	{
 		string_free(&table->name);
 		free_table_columns(table);
-		ASSERT(CloseHandle(table->data_file));
+		ASSERT(UnmapViewOfFile(table->entry_auto_increment));
+		ASSERT(CloseHandle(table->entry_auto_increment_mapping_object));
+		ASSERT(CloseHandle(table->entry_auto_increment_file));
 		return RESULT_ERROR;
 	}
 
@@ -156,17 +231,25 @@ Result table_create(Table* table, String string)
 Result table_insert_entry(Table* table, const u8* entry)
 {
 	// TODO: make a get file size that returns u64 and maybe cache the result.
-	if ((table->entry_auto_increment + 1) * table->entry_size > GetFileSize(table->data_file, NULL))
+	if ((*table->entry_auto_increment + 1) * table->entry_size > GetFileSize(table->data_file, NULL))
 	{
 		// Resize
 	}
 
-	u8* entry_pos = table->data_file_map + table->entry_auto_increment * table->entry_size;
+	u8* entry_pos = table->data_file_map + *table->entry_auto_increment * table->entry_size;
 	memcpy(entry_pos, entry, table->entry_size);
-	table->entry_auto_increment++;
+	// This should be atomic because even if entry_auto_increment doesn't get flushed then
+	// then it gets restored into the old value.
 	if (FlushViewOfFile(entry_pos, table->entry_size) == false)
 	{
 		log_error("failed to flush file map ec: %d", GetLastError());
+		return RESULT_ERROR;
+	}
+	(*table->entry_auto_increment)++;
+	if (FlushViewOfFile(table->entry_auto_increment, sizeof(*table->entry_auto_increment)) == false)
+	{
+		log_error("failed to flush file map ec: %d", GetLastError());
+		(*table->entry_auto_increment)--;
 		return RESULT_ERROR;
 	}
 
@@ -198,7 +281,6 @@ Result table_read(Table* table, String name)
 
 	i64 entry_count;
 	READ_FROM_INFO_FILE(&entry_count, {});
-	table->entry_auto_increment = entry_count; // no cast
 	i64 column_count;
 	READ_FROM_INFO_FILE(&column_count, {});
 	table->column_count = column_count;
@@ -226,42 +308,41 @@ Result table_read(Table* table, String name)
 		READ_FROM_INFO_FILE_BYTES(column->name.data, column_name_size, {});
 		column->name.data[column_name_size] = '\0';
 	}
-	fclose(info_file);
+#undef READ_FROM_INFO_FILE
+#undef READ_FROM_INFO_FILE_BYTES
+	ASSERT(fclose(info_file) == false);
 
 	calculate_columns_offset_in_entry_and_entry_size(table);
 
-	String data_file_name = string_concat(
-		string_view_from_string(&table->name),
-		string_view_from_cstring("_data"));
-
-	table->data_file = CreateFileA(
-		data_file_name.data,
-		GENERIC_READ | GENERIC_WRITE,
-		0,
-		NULL,
-		OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL,
-		NULL);
-
-	string_free(&data_file_name);
-	if (table->data_file == INVALID_HANDLE_VALUE)
+	if (open_read_write_file_and_create_file_map(
+		&table->entry_auto_increment_file,
+		&table->entry_auto_increment_mapping_object,
+		&table->entry_auto_increment,
+		table->name.data,
+		sizeof(*table->entry_auto_increment)) == RESULT_ERROR)
 	{
 		string_free(&table->name);
 		free_table_columns(table);
-
-		log_error("failed to open data file ec: %d", GetLastError());
 		return RESULT_ERROR;
 	}
 
+	String data_file_name = string_concat(
+		string_view_from_string(&table->name), string_view_from_cstring("_data"));
+	size_t initial_size = PAGE_SIZE; // Could use GetSystemInfo to get page size
+	Result result = open_read_write_file_and_create_file_map(
+		&table->data_file,
+		&table->data_file_mapping_object,
+		&table->data_file_map,
+		data_file_name.data,
+		initial_size);
 	string_free(&data_file_name);
-	if (create_read_write_file_map(
-		table->data_file,
-		&table->file_mapping_object,
-		&table->data_file, 0) == RESULT_ERROR)
+	if (result == RESULT_ERROR)
 	{
 		string_free(&table->name);
 		free_table_columns(table);
-		ASSERT(CloseHandle(table->data_file));
+		ASSERT(UnmapViewOfFile(table->entry_auto_increment));
+		ASSERT(CloseHandle(table->entry_auto_increment_mapping_object));
+		ASSERT(CloseHandle(table->entry_auto_increment_file));
 		return RESULT_ERROR;
 	}
 
@@ -272,9 +353,14 @@ void table_free(Table* table)
 {
 	string_free(&table->name);
 	free_table_columns(table);
-	ASSERT(CloseHandle(table->file_mapping_object));
-	ASSERT(CloseHandle(table->data_file));
+
 	ASSERT(UnmapViewOfFile(table->data_file_map));
+	ASSERT(CloseHandle(table->data_file_mapping_object));
+	ASSERT(CloseHandle(table->data_file));
+
+	ASSERT(UnmapViewOfFile(table->entry_auto_increment));
+	ASSERT(CloseHandle(table->entry_auto_increment_mapping_object));
+	ASSERT(CloseHandle(table->entry_auto_increment_file));
 }
 
 void column_free(Column* column)

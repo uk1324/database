@@ -26,15 +26,15 @@
 
 static void table_print(const Table* table)
 {
+	printf("entry count: %zu\n", *table->entry_auto_increment);
 	printf("entry size: %zu\n", table->entry_size);
 	for (size_t i = 0; i < table->column_count; i++)
 	{
 		const Column* column = &table->columns[i];
 		printf("column %s: offset = %zu\n", column->name.data, column->offset_in_entry);
 	}
-	return;
 
-	for (size_t i = 0; i < table->entry_auto_increment; i++)
+	for (size_t i = 0; i < *table->entry_auto_increment; i++)
 	{
 		const u8* entry = table->data_file_map + table->entry_size * i;
 
@@ -68,8 +68,8 @@ int main()
 	String name = string_from_cstring("table");
 	String name2 = string_clone(&name);
 	
-	Result result = table_read(&table, name2);
-	//Result result = table_create(&table, name2);
+	//Result result = table_read(&table, name2);
+	Result result = table_create(&table, name2);
 	if (result == RESULT_ERROR)
 	{
 		log_error("failed to read database %s", name);

@@ -26,10 +26,14 @@ typedef struct
 
 	size_t entry_size;
 
-	size_t entry_auto_increment;
+	HANDLE entry_auto_increment_file;
+	HANDLE entry_auto_increment_mapping_object;
+	// This is just the first 8 bytes of the info file.
+	u64* entry_auto_increment;
+	// mtx_t entry_auto_increment_lock;
 
 	HANDLE data_file;
-	HANDLE file_mapping_object;
+	HANDLE data_file_mapping_object;
 	u8* data_file_map;
 
 } Table;
