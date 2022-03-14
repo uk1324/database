@@ -17,3 +17,4 @@ void log_info(const char* format, ...);
 void error_fatal(const char* format, ...);
 
 void log_error(const char* format, ...);
+void log_error_strerror(const char* format, ...);

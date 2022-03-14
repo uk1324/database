@@ -20,6 +20,8 @@
 
 // If a function takes a pointer to a string it takes ownership to the deta in the string.
 
+// Could use strerror.
+
 #include "database.h"
 
 #include "allocation.h"
@@ -55,8 +57,127 @@ static void table_print(const Table* table)
 	}
 }
 
+#include "language/parser.h"
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
+
+typedef int Socket;
+
+#define PORT "8080"  // the port users will be connecting to
+
+void* get_in_addr(struct sockaddr* sa)
+{
+	if (sa->sa_family == AF_INET) {
+		return &(((struct sockaddr_in*)sa)->sin_addr);
+	}
+
+	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
 int main()
 {
+	WSADATA wsa_data;
+	int res = WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0;
+	if (res != 0)
+	{
+		log_error("WSAStartup failed: %d\n", res);
+		return EXIT_FAILURE;
+	}
+
+	struct addrinfo hints, *servinfo;
+	struct sockaddr_storage their_addr; // connector's address information
+	socklen_t sin_size;
+	int yes = 1;
+	char s[INET6_ADDRSTRLEN];
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE; // use my IP
+
+	int rv;
+	if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0)
+	{
+		log_error(stderr, "getaddrinfo: %s\n", gai_strerrorA(rv));
+		return EXIT_FAILURE;
+	}
+
+	SOCKET sockfd;
+	// loop through all the results and bind to the first we can
+	struct addrinfo* p;
+	for (p = servinfo; p != NULL; p = p->ai_next)
+	{
+		if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+		{
+			perror("server: socket");
+			continue;
+		}
+
+		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+			sizeof(int)) == -1) {
+			perror("setsockopt");
+			exit(1);
+		}
+
+		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+			close(sockfd);
+			perror("server: bind");
+			continue;
+		}
+
+		break;
+	}
+
+	freeaddrinfo(servinfo); // all done with this structure
+
+	if (p == NULL)
+	{
+		fprintf(stderr, "server: failed to bind\n");
+		exit(1);
+	}
+
+	if (listen(sockfd, 10) == -1) {
+		perror("listen");
+		exit(1);
+	}
+
+	printf("server: waiting for connections...\n");
+
+	while (1) {  // main accept() loop
+		sin_size = sizeof their_addr;
+		SOCKET new_fd = accept(sockfd, (struct sockaddr*)&their_addr, &sin_size);
+		if (new_fd == -1) {
+			perror("accept");
+			continue;
+		}
+
+		inet_ntop(their_addr.ss_family,
+			get_in_addr((struct sockaddr*)&their_addr),
+			s, sizeof s);
+		printf("server: got connection from %s\n", s);
+
+		send(new_fd, "Hello, world!", 13, 0);
+		closesocket(new_fd);  // parent doesn't need this
+	}
+
+	return 0;
+
+	WSACleanup();
+
+	//return 0;
+	//StringView text = string_view_from_cstring("get * from table");
+	//Parser parser;
+	//Stmt stmt;
+	//if (parser_parse(&parser, &stmt, text) == RESULT_ERROR)
+	//{
+	//	return;
+	//}
+
+	//sizeof(Parser);
+
+	return 0;
 	//int abc = 3;
 	//// Is this little endian only?
 	//printf("%p\n", &((u8)abc));

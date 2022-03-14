@@ -120,6 +120,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -134,6 +135,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -147,6 +149,11 @@
     <ClCompile Include="database.c" />
     <ClCompile Include="data_type.c" />
     <ClCompile Include="error.c" />
+    <ClCompile Include="language\compiler.c" />
+    <ClCompile Include="language\parser.c" />
+    <ClCompile Include="language\scanner.c" />
+    <ClCompile Include="language\vm.c" />
+    <ClCompile Include="language\vm.h" />
     <ClCompile Include="main.c" />
     <ClCompile Include="str.c" />
     <ClCompile Include="string_view.c" />
@@ -157,6 +164,10 @@
     <ClInclude Include="database.h" />
     <ClInclude Include="data_type.h" />
     <ClInclude Include="error.h" />
+    <ClInclude Include="language\ast.h" />
+    <ClInclude Include="language\compiler.h" />
+    <ClInclude Include="language\parser.h" />
+    <ClInclude Include="language\scanner.h" />
     <ClInclude Include="locks.h" />
     <ClInclude Include="str.h" />
     <ClInclude Include="string_view.h" />

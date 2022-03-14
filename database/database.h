@@ -1,6 +1,7 @@
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
+//#define _WINNT_
 #include <Windows.h>
 #include "error.h"
 #include "str.h"
