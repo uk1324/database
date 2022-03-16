@@ -11,9 +11,14 @@ static char peek(const Scanner* scanner)
 	return scanner->text.data[scanner->current_char_index];
 }
 
+static bool is_at_end(Scanner* scanner)
+{
+	return scanner->current_char_index >= scanner->text.size;
+}
+
 static void advance(Scanner* scanner)
 {
-	if (scanner->current_char_index >= scanner->text.size)
+	if (is_at_end(scanner))
 	{
 		return;
 	}
@@ -77,9 +82,15 @@ static Token keyword_or_identifier(Scanner* scanner)
 
 Token scanner_next(Scanner* scanner)
 {
-	char c = peek(scanner);
+	if (is_at_end(scanner))
+	{
+		return make_token(scanner, TOKEN_EOF);
+	}
 
-	switch (peek(c))
+	char c = peek(scanner);
+	advance(c);
+
+	switch (c)
 	{
 	default:
 		if (is_alpha(c))

@@ -57,7 +57,16 @@ static void table_print(const Table* table)
 	}
 }
 
+void thread_func()
+{
+	for (;;)
+	{
+		client_thread();
+	}
+}
+
 #include "language/parser.h"
+#include "language/vm.h"
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -66,6 +75,8 @@ static void table_print(const Table* table)
 typedef int Socket;
 
 #define PORT "8080"  // the port users will be connecting to
+
+#include "client/client.h"
 
 void* get_in_addr(struct sockaddr* sa)
 {
@@ -86,17 +97,13 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	struct addrinfo hints, *servinfo;
-	struct sockaddr_storage their_addr; // connector's address information
-	socklen_t sin_size;
-	int yes = 1;
-	char s[INET6_ADDRSTRLEN];
-
+	struct addrinfo hints;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE; // use my IP
 
+	struct addrinfo* servinfo;
 	int rv;
 	if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0)
 	{
@@ -104,67 +111,127 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	SOCKET sockfd;
-	// loop through all the results and bind to the first we can
-	struct addrinfo* p;
+	SOCKET listening_socket;
+	struct addrinfo* p = NULL;
 	for (p = servinfo; p != NULL; p = p->ai_next)
 	{
-		if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+		if ((listening_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == INVALID_SOCKET)
 		{
-			perror("server: socket");
+			log_error_wsa_strerror("socket");
 			continue;
 		}
 
-		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-			sizeof(int)) == -1) {
+		int yes = 1;
+		if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+		{
 			perror("setsockopt");
 			exit(1);
 		}
 
-		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-			close(sockfd);
+		if (bind(listening_socket, p->ai_addr, p->ai_addrlen) == INVALID_SOCKET)
+		{
+			close(listening_socket);
 			perror("server: bind");
 			continue;
 		}
 
 		break;
 	}
-
-	freeaddrinfo(servinfo); // all done with this structure
+	freeaddrinfo(servinfo);
 
 	if (p == NULL)
 	{
-		fprintf(stderr, "server: failed to bind\n");
-		exit(1);
+		log_error_wsa_strerror(stderr, "bind");
+		return EXIT_FAILURE;
 	}
 
-	if (listen(sockfd, 10) == -1) {
-		perror("listen");
-		exit(1);
+	if (listen(listening_socket, 10) == -1)
+	{
+		log_error_wsa_strerror("listen");
+		return EXIT_FAILURE;
 	}
 
 	printf("server: waiting for connections...\n");
 
-	while (1) {  // main accept() loop
-		sin_size = sizeof their_addr;
-		SOCKET new_fd = accept(sockfd, (struct sockaddr*)&their_addr, &sin_size);
-		if (new_fd == -1) {
-			perror("accept");
+	HANDLE thread = CreateThread(NULL, 0, client_thread, NULL, 0, NULL);
+
+	Table t;
+	String n= string_from_cstring("table");
+	String n2 = string_clone(&n);
+
+	//Result result = table_create(&table, name2);
+	Result result = table_read(&t, n2);
+	if (result == RESULT_ERROR)
+	{
+		log_error("failed to read database %s", n);
+		return EXIT_FAILURE;
+	}
+	//table_print(&t);
+
+	for (;;)
+	{
+		struct sockaddr_storage their_addr;
+		socklen_t sin_size = sizeof(their_addr);
+		SOCKET new_fd = accept(listening_socket, (struct sockaddr*)&their_addr, &sin_size);
+		if (new_fd == INVALID_SOCKET)
+		{
+			log_error_wsa_strerror("accept");
 			continue;
 		}
-
-		inet_ntop(their_addr.ss_family,
-			get_in_addr((struct sockaddr*)&their_addr),
-			s, sizeof s);
+		char s[INET6_ADDRSTRLEN];
+		inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr*)&their_addr), s, sizeof(s));
 		printf("server: got connection from %s\n", s);
 
-		send(new_fd, "Hello, world!", 13, 0);
-		closesocket(new_fd);  // parent doesn't need this
+		char buffer[1024];
+		size_t size = recv(new_fd, buffer, sizeof(buffer), 0);
+		StringView statement;
+		statement.data = buffer;
+		statement.size = size;
+		Vm vm;
+		execute_statement(new_fd, statement, &vm, &t);
+
+		u32 status_code = 0;
+		send(new_fd, (char*)&status_code, sizeof(status_code), 0);
+
+		const char* message = "message";
+		u32 message_length = strlen(message);
+		send(new_fd, (char*)&message_length, sizeof(message_length), 0);
+		send(new_fd, message, message_length, 0);
+
+		u64 column_count = t.column_count;
+		send(new_fd, &column_count, sizeof(column_count), 0);
+		u64 entry_count = *t.entry_auto_increment;
+		send(new_fd, &entry_count, sizeof(entry_count), 0);
+
+		for (size_t i = 0; i < t.column_count; i++)
+		{
+			Column* column = &t.columns[i];
+			u32 data_type = column->data_type.type;
+			send(new_fd, &data_type, sizeof(data_type), 0);
+			u32 name_size = column->name.size;
+			send(new_fd, &name_size, sizeof(data_type), 0);
+			send(new_fd, column->name.data, name_size, 0);
+			//column->data_type
+		}
+
+		for (size_t i = 0; i < *t.entry_auto_increment; i++)
+		{
+			const u8* entry = t.data_file_map + t.entry_size * i;
+			for (size_t i = 0; i < t.column_count; i++)
+			{
+				const Column* column = &t.columns[i];
+				send(new_fd, entry + column->offset_in_entry, data_type_size(&column->data_type), 0);
+			}
+		}
+
+		closesocket(new_fd); 
 	}
 
-	return 0;
+	WaitForSingleObject(thread, INFINITE);
 
 	WSACleanup();
+	return 0;
+
 
 	//return 0;
 	//StringView text = string_view_from_cstring("get * from table");
@@ -189,9 +256,9 @@ int main()
 	String name = string_from_cstring("table");
 	String name2 = string_clone(&name);
 	
-	//Result result = table_read(&table, name2);
-	Result result = table_create(&table, name2);
-	if (result == RESULT_ERROR)
+	//Result result = table_create(&table, name2);
+	Result r = table_read(&table, name2);
+	if (r == RESULT_ERROR)
 	{
 		log_error("failed to read database %s", name);
 		return EXIT_FAILURE;

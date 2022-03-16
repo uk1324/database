@@ -36,7 +36,7 @@ void log_error(const char* format, ...)
 	va_end(args);
 }
 
-void log_error_strerror(const char* format, ...)
+void log_error_wsa_strerror(const char* format, ...)
 {
 	fprintf(stderr, "error: ");
 	va_list args;

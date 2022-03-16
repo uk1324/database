@@ -11,8 +11,9 @@ typedef struct
 	size_t exprs_allocated;
 
 	Token current_token;
+	Token previous_token;
 
 	Scanner scanner;
 } Parser;
 
-Result parser_parse(Parser* parser, Stmt* stmt, StringView text);
+Result parser_parse(Parser* parser, Stmt* statement, StringView text);

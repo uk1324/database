@@ -146,6 +146,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="allocation.c" />
+    <ClCompile Include="client\client.c" />
     <ClCompile Include="database.c" />
     <ClCompile Include="data_type.c" />
     <ClCompile Include="error.c" />
@@ -161,6 +162,7 @@
   <ItemGroup>
     <ClInclude Include="allocation.h" />
     <ClInclude Include="assertions.h" />
+    <ClInclude Include="client\client.h" />
     <ClInclude Include="database.h" />
     <ClInclude Include="data_type.h" />
     <ClInclude Include="error.h" />
