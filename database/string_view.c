@@ -21,5 +21,5 @@ bool string_view_compare(StringView a, StringView b)
 {
 	if (a.size != b.size)
 		return false;
-	return memcmp(a.data, b.data, a.size);
+	return memcmp(a.data, b.data, a.size) == 0;
 }

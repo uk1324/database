@@ -1,6 +1,7 @@
 #pragma once
 
-#include <winsock.h>
+//#include <winsock.h>
+//#pragma comment(lib, "Ws2_32.lib")
 #include "../database.h"
 #include "parser.h"
 #include "compiler.h"
@@ -13,4 +14,4 @@ typedef struct
 
 } Vm;
 
-Result execute_statement(SOCKET socket, StringView statement, Vm* vm, Table* table);
+Result execute_statement(int socket, StringView statement, Vm* vm, Table* table);

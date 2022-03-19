@@ -188,41 +188,7 @@ int main()
 		statement.data = buffer;
 		statement.size = size;
 		Vm vm;
-		execute_statement(new_fd, statement, &vm, &t);
-
-		u32 status_code = 0;
-		send(new_fd, (char*)&status_code, sizeof(status_code), 0);
-
-		const char* message = "message";
-		u32 message_length = strlen(message);
-		send(new_fd, (char*)&message_length, sizeof(message_length), 0);
-		send(new_fd, message, message_length, 0);
-
-		u64 column_count = t.column_count;
-		send(new_fd, &column_count, sizeof(column_count), 0);
-		u64 entry_count = *t.entry_auto_increment;
-		send(new_fd, &entry_count, sizeof(entry_count), 0);
-
-		for (size_t i = 0; i < t.column_count; i++)
-		{
-			Column* column = &t.columns[i];
-			u32 data_type = column->data_type.type;
-			send(new_fd, &data_type, sizeof(data_type), 0);
-			u32 name_size = column->name.size;
-			send(new_fd, &name_size, sizeof(data_type), 0);
-			send(new_fd, column->name.data, name_size, 0);
-			//column->data_type
-		}
-
-		for (size_t i = 0; i < *t.entry_auto_increment; i++)
-		{
-			const u8* entry = t.data_file_map + t.entry_size * i;
-			for (size_t i = 0; i < t.column_count; i++)
-			{
-				const Column* column = &t.columns[i];
-				send(new_fd, entry + column->offset_in_entry, data_type_size(&column->data_type), 0);
-			}
-		}
+		ASSERT(execute_statement(new_fd, statement, &vm, &t) == RESULT_OK);
 
 		closesocket(new_fd); 
 	}

@@ -2,12 +2,12 @@
 
 static ToknType peek(const Parser* parser)
 {
-	return parser->previous_token.type;
+	return parser->current_token.type;
 }
 
 static ToknType peek_previous(const Parser* parser)
 {
-	return parser->current_token.type;
+	return parser->previous_token.type;
 }
 
 static void advance(Parser* parser)
@@ -45,11 +45,13 @@ Result expr(Parser* parser, Expr* expr)
 Result parser_parse(Parser* parser, Stmt* statement, StringView text)
 {
 	scanner_init(&parser->scanner, text);
+	parser->current_token = scanner_next(&parser->scanner);
 
 	if (match(parser, TOKEN_KEYWORD_GET))
 	{
 		statement->type = STMT_GET;
 		GetStmt* stmt = &statement->get;
+		stmt->column_count = 0;
 
 		do
 		{

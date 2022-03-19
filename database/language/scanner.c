@@ -4,6 +4,7 @@ void scanner_init(Scanner* scanner, StringView text)
 {
 	scanner->text = text;
 	scanner->current_char_index = 0;
+	scanner->token_start_char_index = 0;
 }
 
 static char peek(const Scanner* scanner)
@@ -41,7 +42,24 @@ static bool is_alpha(char c)
 
 static bool is_digit(char c)
 {
-	return ((c >= 0) && (c <= 9));
+	return ((c >=  '0') && (c <= '9'));
+}
+
+void skip_whitespace(Scanner* scanner)
+{
+	while (is_at_end(scanner) == false)
+	{
+		switch (peek(scanner))
+		{
+		case ' ':
+			advance(scanner);
+			break;
+
+		default:
+			scanner->token_start_char_index = scanner->current_char_index;
+			return;
+		}
+	}
 }
 
 static Token keyword_or_identifier(Scanner* scanner)
@@ -49,7 +67,7 @@ static Token keyword_or_identifier(Scanner* scanner)
 	do
 	{
 		advance(scanner);
-	} while (is_alpha(peek(scanner)) || (peek(scanner) == '_'));
+	} while (is_alpha(peek(scanner)) || (peek(scanner) == '_') || is_digit(peek(scanner)));
 
 	StringView text = string_view_substr(
 		scanner->text,
@@ -87,18 +105,23 @@ Token scanner_next(Scanner* scanner)
 		return make_token(scanner, TOKEN_EOF);
 	}
 
+	skip_whitespace(scanner);
+
 	char c = peek(scanner);
-	advance(c);
+	advance(scanner);
 
 	switch (c)
 	{
+	case ',': return make_token(scanner, TOKEN_COMMA);
+
+		
 	default:
 		if (is_alpha(c))
 		{
 			return keyword_or_identifier(scanner);
 		}
 
-		make_token(scanner, TOKEN_ERROR);
+		return make_token(scanner, TOKEN_ERROR);
 		break;
 	}
 }

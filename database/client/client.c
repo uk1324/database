@@ -93,6 +93,9 @@ int client_thread()
 	//	//exit(1);
 	//}
 
+	char statement[] = "get col1, col1";
+	send(sock, statement, sizeof(statement), 0);
+
 #define READ_BYTES(data_ptr, bytes_to_read) \
 	if (buffered_read(sock, data_ptr, bytes_to_read) == RESULT_ERROR) \
 	{ \
