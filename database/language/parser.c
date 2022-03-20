@@ -42,15 +42,15 @@ Result expr(Parser* parser, Expr* expr)
 	return RESULT_ERROR;
 }
 
-Result parser_parse(Parser* parser, Stmt* statement, StringView text)
+Result parser_parse(Parser* parser, Query* statement, StringView text)
 {
 	scanner_init(&parser->scanner, text);
 	parser->current_token = scanner_next(&parser->scanner);
 
 	if (match(parser, TOKEN_KEYWORD_GET))
 	{
-		statement->type = STMT_GET;
-		GetStmt* stmt = &statement->get;
+		statement->type = QUERY_GET;
+		GetQuery* stmt = &statement->get;
 		stmt->column_count = 0;
 
 		do

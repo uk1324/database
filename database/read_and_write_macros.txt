@@ -1,0 +1,2 @@
+I think it is better for the read and write macros to take a pointer because it reduces the possiblity of error
+because the pointer has to be dereferenced for the sizeof.

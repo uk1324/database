@@ -1,16 +1,19 @@
 #pragma once
 
-enum Status
-{
-	STATUS_OK,
-	STATUS_ERROR
-};
-
 typedef enum
 {
 	RESULT_OK,
 	RESULT_ERROR,
 } Result;
+
+#define CHECK_RESULT(result) \
+	do \
+	{ \
+		if ((result) == RESULT_ERROR) \
+		{ \
+			return RESULT_ERROR; \
+		} \
+	} while (0)
 
 void log_info(const char* format, ...);
 

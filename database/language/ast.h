@@ -23,9 +23,9 @@ typedef struct
 
 typedef enum
 {
-	STMT_GET,
-	STMT_INSERT,
-} StmtType;
+	QUERY_GET,
+	QUERY_INSERT,
+} QueryType;
 
 #define STMT_MAX_COLUMNS 4096
 
@@ -35,13 +35,13 @@ typedef struct
 	size_t column_count;
 
 	StringView table_name;
-} GetStmt;
+} GetQuery;
 
 typedef struct
 {
-	StmtType type;
+	QueryType type;
 	union
 	{
-		GetStmt get;
+		GetQuery get;
 	};
-} Stmt;
+} Query;

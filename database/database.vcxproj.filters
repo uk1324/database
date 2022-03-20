@@ -98,10 +98,14 @@
     <ClInclude Include="client\client.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="messages.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="closing_handles.txt" />
     <Text Include="strings.txt" />
     <Text Include="transactions.txt" />
+    <Text Include="read_and_write_macros.txt" />
   </ItemGroup>
 </Project>

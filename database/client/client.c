@@ -1,14 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "Ws2_32.lib")
 #include "../error.h"
 #include "../types.h"
 #include "../data_type.h"
-
-#define PORT "8080"
+#include "../messages.h"
+#include "../assertions.h"
 
 static Result buffered_read(SOCKET socket, void* buff, size_t bytes)
 {
@@ -16,7 +17,7 @@ static Result buffered_read(SOCKET socket, void* buff, size_t bytes)
 
 	static u8 read_buffer[4096];
 
-	int bytes_read = recv(socket, buffer, bytes, 0);
+	int bytes_read = recv(socket, buffer, (int)bytes, 0);
 	if (bytes_read <= 0)
 	{
 		return RESULT_ERROR;
@@ -38,9 +39,8 @@ static void* get_in_addr(struct sockaddr* sa)
 
 int client_thread()
 {
-	int sock, numbytes;
+	SOCKET sock;
 	struct addrinfo *servinfo;
-	int rv;
 	char s[INET6_ADDRSTRLEN];
 
 	struct addrinfo hints;
@@ -49,7 +49,7 @@ int client_thread()
 	hints.ai_socktype = SOCK_STREAM;
 
 	int result;
-	if ((result = getaddrinfo("localhost", PORT, &hints, &servinfo)) != 0)
+	if ((result = getaddrinfo("localhost", "8080", &hints, &servinfo)) != 0)
 	{
 		log_error("getaddrinfo: %s\n", gai_strerrorA(result));
 		return 1;
@@ -64,7 +64,7 @@ int client_thread()
 			continue;
 		}
 
-		if (connect(sock, p->ai_addr, p->ai_addrlen) == SOCKET_ERROR)
+		if (connect(sock, p->ai_addr, (int)p->ai_addrlen) == SOCKET_ERROR)
 		{
 			log_error_wsa_strerror("connect");
 			closesocket(sock);
@@ -104,54 +104,118 @@ int client_thread()
 
 #define READ(data_ptr) READ_BYTES(data_ptr, sizeof(*data_ptr))
 
-	u32 status_code;
-	READ(&status_code);
-	u32 message_length;
-	READ(&message_length);
-	char message[299];
-	READ_BYTES(message, message_length);
+#define CHECK_MESSAGE() \
+	{ \
+		u8 message; \
+		READ(&message); \
+		if (message == MESSAGE_ERROR) \
+		{ \
+			printf("query error\n"); \
+			return RESULT_ERROR; \
+		} \
+		if (message == MESSAGE_END) \
+		{ \
+			ASSERT_NOT_REACHED(); \
+		} \
+	}
+	
+	CHECK_MESSAGE();
 	u64 column_count;
-	printf("status: %d, message: %.*s\n", status_code, message_length, message);
 	READ(&column_count);
-	u64 entry_count;
-	READ(&entry_count);
-
 	DataType data_types[299];
-	for (size_t i = 0; i < column_count; i++)
+	for (size_t i = 0; i < (size_t)column_count; i++)
 	{
+		CHECK_MESSAGE();
 		u32 data_type;
 		READ(&data_type);
-		data_types[i].type = data_type;
-		u32 name_size;
-		READ(&name_size);
-		READ_BYTES(message, name_size);
-		printf("data_type: %d name: %.*s\n", data_type, name_size, message);
+		data_types[i] = data_type_from_type(data_type);
 	}
-	printf("entry count: %zu\n", entry_count);
 
-	for (size_t i = 0; i < entry_count; i++)
+	size_t results_read = 0;
+	for (;;)
 	{
-		printf("1 - ");
+		u8 message;
+		READ(&message);
+		if (message == MESSAGE_END)
+		{
+			printf("read %zu results\n", results_read);
+			break;
+		}
+		else if (message == MESSAGE_ERROR)
+		{
+			printf("query error\n");
+			break;
+		}
+
 		for (size_t i = 0; i < column_count; i++)
 		{
-			switch (data_types->type)
+			switch (data_types[i].type)
 			{
 			case DATA_TYPE_I32:
 			{
-				i32 v;
-				READ(&v);
-				printf("%d ", v);
+				CHECK_MESSAGE();
+				i32 value;
+				READ(&value);
+				printf("received: %" PRIu32 "\n", value);
+				break;
 			}
 
-			default:
-				break;
 			}
 		}
 		printf("\n");
+
+		results_read++;
 	}
+
+	//u32 status_code;
+	//READ(&status_code);
+	//u32 message_length;
+	//READ(&message_length);
+	//char message[299];
+	//READ_BYTES(message, message_length);
+	//u64 column_count;
+	//printf("status: %d, message: %.*s\n", status_code, message_length, message);
+	//READ(&column_count);
+	//u64 entry_count;
+	//READ(&entry_count);
+
+	//DataType data_types[299];
+	//for (size_t i = 0; i < column_count; i++)
+	//{
+	//	u32 data_type;
+	//	READ(&data_type);
+	//	data_types[i].type = data_type;
+	//	u32 name_size;
+	//	READ(&name_size);
+	//	READ_BYTES(message, name_size);
+	//	printf("data_type: %d name: %.*s\n", data_type, name_size, message);
+	//}
+	//printf("entry count: %zu\n", entry_count);
+
+	//for (size_t i = 0; i < entry_count; i++)
+	//{
+	//	printf("1 - ");
+	//	for (size_t i = 0; i < column_count; i++)
+	//	{
+	//		switch (data_types->type)
+	//		{
+	//		case DATA_TYPE_I32:
+	//		{
+	//			i32 v;
+	//			READ(&v);
+	//			printf("%d ", v);
+	//		}
+
+	//		default:
+	//			break;
+	//		}
+	//	}
+	//	printf("\n");
+	//}
 
 #undef READ_BYTES
 #undef READ
+#undef CHECK_MESSAGE
 	//u32* message_length = status_code + 1;
 	//u8* message = message_length + 4;
 	

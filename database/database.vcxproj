@@ -171,12 +171,14 @@
     <ClInclude Include="language\parser.h" />
     <ClInclude Include="language\scanner.h" />
     <ClInclude Include="locks.h" />
+    <ClInclude Include="messages.h" />
     <ClInclude Include="str.h" />
     <ClInclude Include="string_view.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="closing_handles.txt" />
+    <Text Include="read_and_write_macros.txt" />
     <Text Include="strings.txt" />
     <Text Include="transactions.txt" />
   </ItemGroup>

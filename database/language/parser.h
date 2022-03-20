@@ -16,4 +16,4 @@ typedef struct
 	Scanner scanner;
 } Parser;
 
-Result parser_parse(Parser* parser, Stmt* statement, StringView text);
+Result parser_parse(Parser* parser, Query* statement, StringView text);

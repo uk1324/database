@@ -46,7 +46,7 @@ static void table_print(const Table* table)
 			const Column* column = &table->columns[i];
 			if (column->data_type.type == DATA_TYPE_I32)
 			{
-				printf("%d ", entry[column->offset_in_entry]);
+				printf("%d ", *(i32*)(entry + column->offset_in_entry));
 			}
 			else
 			{
@@ -54,14 +54,6 @@ static void table_print(const Table* table)
 			}
 		}
 		printf("\n");
-	}
-}
-
-void thread_func()
-{
-	for (;;)
-	{
-		client_thread();
 	}
 }
 
@@ -87,8 +79,47 @@ void* get_in_addr(struct sockaddr* sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+void setup()
+{
+	Table table;
+	String name = string_from_cstring("table");
+	String name2 = string_clone(&name);
+
+	Result r = table_create(&table, name2);
+	//Result r = table_read(&table, name2);
+	if (r == RESULT_ERROR)
+	{
+		log_error("failed to read database %s", name);
+		return EXIT_FAILURE;
+	}
+
+	u8* entry = try_malloc(table.entry_size);
+	for (size_t i = 0; i < 4; i++)
+	{
+		for (size_t i = 0; i < table.column_count; i++)
+		{
+			const Column* column = &table.columns[i];
+			switch (column->data_type.type)
+			{
+			case DATA_TYPE_I32:
+				*(i32*)&entry[column->offset_in_entry] = rand();
+				break;
+
+			default:
+				ASSERT_NOT_REACHED();
+			}
+		}
+		table_insert_entry(&table, entry);
+	}
+	free(entry);
+
+	table_print(&table);
+}
+
 int main()
 {
+	//setup();
+	//return 0;
 	WSADATA wsa_data;
 	int res = WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0;
 	if (res != 0)
@@ -107,7 +138,7 @@ int main()
 	int rv;
 	if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0)
 	{
-		log_error(stderr, "getaddrinfo: %s\n", gai_strerrorA(rv));
+		log_error("getaddrinfo: %s\n", gai_strerrorA(rv));
 		return EXIT_FAILURE;
 	}
 
@@ -122,15 +153,15 @@ int main()
 		}
 
 		int yes = 1;
-		if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1)
+		if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes)) == -1)
 		{
 			perror("setsockopt");
 			exit(1);
 		}
 
-		if (bind(listening_socket, p->ai_addr, p->ai_addrlen) == INVALID_SOCKET)
+		if (bind(listening_socket, p->ai_addr, (int)p->ai_addrlen) == INVALID_SOCKET)
 		{
-			close(listening_socket);
+			closesocket(listening_socket);
 			perror("server: bind");
 			continue;
 		}
@@ -141,7 +172,7 @@ int main()
 
 	if (p == NULL)
 	{
-		log_error_wsa_strerror(stderr, "bind");
+		log_error_wsa_strerror("bind");
 		return EXIT_FAILURE;
 	}
 
@@ -153,7 +184,8 @@ int main()
 
 	printf("server: waiting for connections...\n");
 
-	HANDLE thread = CreateThread(NULL, 0, client_thread, NULL, 0, NULL);
+	
+	HANDLE thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)client_thread, NULL, 0, NULL);
 
 	Table t;
 	String n= string_from_cstring("table");
@@ -166,7 +198,7 @@ int main()
 		log_error("failed to read database %s", n);
 		return EXIT_FAILURE;
 	}
-	//table_print(&t);
+	table_print(&t);
 
 	for (;;)
 	{
@@ -187,9 +219,9 @@ int main()
 		StringView statement;
 		statement.data = buffer;
 		statement.size = size;
-		Vm vm;
-		ASSERT(execute_statement(new_fd, statement, &vm, &t) == RESULT_OK);
-
+		Vm* vm = malloc(sizeof(Vm));
+		ASSERT(execute_statement(new_fd, statement, vm, &t) == RESULT_OK);
+		free(vm);
 		closesocket(new_fd); 
 	}
 
